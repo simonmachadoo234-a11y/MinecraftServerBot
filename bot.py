@@ -1,22 +1,27 @@
 import discord
-from discord import app_commands
 from discord.ext import commands
+
 from config import DISCORD_TOKEN
+from minecraft import get_status
+from aternos import start_server, stop_server
 from permissions import (
     has_permission,
     add_user,
     remove_user,
     get_users
 )
-from minecraft import get_status
-from aternos import start_server, stop_server
+
+import asyncio
 
 
 # ==========================
-# BOT CONFIG
+# CONFIG BOT
 # ==========================
 
 intents = discord.Intents.default()
+intents.message_content = True
+intents.members = True
+
 
 bot = commands.Bot(
     command_prefix="!",
@@ -24,43 +29,23 @@ bot = commands.Bot(
 )
 
 
-
 # ==========================
-# EVENTOS
+# EVENTO INICIO
 # ==========================
-
 
 @bot.event
 async def on_ready():
 
-    print(f"✅ Conectado como {bot.user}")
-
-    try:
-
-        synced = await bot.tree.sync()
-
-        print(
-            f"✅ {len(synced)} comandos sincronizados"
-        )
-
-    except Exception as e:
-
-        print(
-            f"Error sincronizando comandos: {e}"
-        )
+    print(f"✅ Bot conectado como {bot.user}")
 
 
 
 # ==========================
-# /mc
+# COMANDO !mc
 # ==========================
 
-
-@bot.tree.command(
-    name="mc",
-    description="Ver estado del servidor Minecraft"
-)
-async def mc(interaction: discord.Interaction):
+@bot.command()
+async def mc(ctx):
 
     status = get_status()
 
@@ -72,12 +57,10 @@ async def mc(interaction: discord.Interaction):
             color=0x00ff00
         )
 
-
         embed.add_field(
             name="👥 Jugadores",
             value=status["players"]
         )
-
 
         embed.add_field(
             name="📦 Versión",
@@ -93,36 +76,26 @@ async def mc(interaction: discord.Interaction):
         )
 
 
-    await interaction.response.send_message(
-        embed=embed
-    )
+    await ctx.send(embed=embed)
 
 
 
 # ==========================
-# /start
+# COMANDO !start
 # ==========================
 
+@bot.command()
+async def start(ctx):
 
-@bot.tree.command(
-    name="start",
-    description="Encender servidor"
-)
-async def start(interaction: discord.Interaction):
+    if not has_permission(ctx.author.id):
 
-
-    if not has_permission(interaction.user.id):
-
-        await interaction.response.send_message(
-            "❌ No tienes permisos.",
-            ephemeral=True
+        await ctx.send(
+            "❌ No tienes permisos para iniciar el servidor."
         )
-
         return
 
 
-
-    await interaction.response.send_message(
+    msg = await ctx.send(
         "▶️ Iniciando servidor..."
     )
 
@@ -130,36 +103,28 @@ async def start(interaction: discord.Interaction):
     result = await start_server()
 
 
-    await interaction.followup.send(
-        result
+    await msg.edit(
+        content=result
     )
 
 
 
 # ==========================
-# /stop
+# COMANDO !stop
 # ==========================
 
+@bot.command()
+async def stop(ctx):
 
-@bot.tree.command(
-    name="stop",
-    description="Apagar servidor"
-)
-async def stop(interaction: discord.Interaction):
+    if not has_permission(ctx.author.id):
 
-
-    if not has_permission(interaction.user.id):
-
-        await interaction.response.send_message(
-            "❌ No tienes permisos.",
-            ephemeral=True
+        await ctx.send(
+            "❌ No tienes permisos para apagar el servidor."
         )
-
         return
 
 
-
-    await interaction.response.send_message(
+    msg = await ctx.send(
         "⏹️ Apagando servidor..."
     )
 
@@ -167,163 +132,109 @@ async def stop(interaction: discord.Interaction):
     result = await stop_server()
 
 
-    await interaction.followup.send(
-        result
+    await msg.edit(
+        content=result
     )
 
 
 
 # ==========================
-# /restart
+# COMANDO !restart
 # ==========================
 
+@bot.command()
+async def restart(ctx):
 
-@bot.tree.command(
-    name="restart",
-    description="Reiniciar servidor"
-)
-async def restart(interaction: discord.Interaction):
+    if not has_permission(ctx.author.id):
 
-
-    if not has_permission(interaction.user.id):
-
-        await interaction.response.send_message(
-            "❌ No tienes permisos.",
-            ephemeral=True
+        await ctx.send(
+            "❌ No tienes permisos."
         )
-
         return
 
 
-
-    await interaction.response.send_message(
-        "🔄 Reiniciando..."
+    await ctx.send(
+        "🔄 Reiniciando servidor..."
     )
 
 
     stop = await stop_server()
 
-    await interaction.followup.send(
-        stop
-    )
+    await ctx.send(stop)
 
-
-    import asyncio
 
     await asyncio.sleep(10)
 
 
     start = await start_server()
 
+    await ctx.send(start)
 
-    await interaction.followup.send(
-        start
-    )
+
 
 # ==========================
-# /adduser
+# ADMINISTRACIÓN USUARIOS
 # ==========================
 
-@bot.tree.command(
-    name="adduser",
-    description="Dar permisos a un usuario"
-)
-@app_commands.describe(
-    user="Usuario que tendrá permisos"
-)
-async def adduser(
-    interaction: discord.Interaction,
-    user: discord.Member
-):
 
-    if not has_permission(interaction.user.id):
+@bot.command()
+async def adduser(ctx, member: discord.Member):
 
-        await interaction.response.send_message(
-            "❌ No tienes permisos.",
-            ephemeral=True
+    if not has_permission(ctx.author.id):
+
+        await ctx.send(
+            "❌ No tienes permisos."
         )
-
         return
 
 
-    added = add_user(user.id)
+    if add_user(member.id):
 
-
-    if added:
-
-        msg = f"✅ {user.mention} ahora puede usar comandos de control."
+        await ctx.send(
+            f"✅ {member.mention} ahora puede controlar el servidor."
+        )
 
     else:
 
-        msg = "⚠️ Ese usuario ya tenía permisos."
-
-
-    await interaction.response.send_message(msg)
-
-
-
-# ==========================
-# /removeuser
-# ==========================
-
-
-@bot.tree.command(
-    name="removeuser",
-    description="Quitar permisos a un usuario"
-)
-@app_commands.describe(
-    user="Usuario a quitar"
-)
-async def removeuser(
-    interaction: discord.Interaction,
-    user: discord.Member
-):
-
-    if not has_permission(interaction.user.id):
-
-        await interaction.response.send_message(
-            "❌ No tienes permisos.",
-            ephemeral=True
+        await ctx.send(
+            "⚠️ Ese usuario ya tiene permisos."
         )
 
+
+
+@bot.command()
+async def removeuser(ctx, member: discord.Member):
+
+    if not has_permission(ctx.author.id):
+
+        await ctx.send(
+            "❌ No tienes permisos."
+        )
         return
 
 
-    removed = remove_user(user.id)
+    if remove_user(member.id):
 
-
-    if removed:
-
-        msg = f"✅ {user.mention} eliminado."
+        await ctx.send(
+            f"✅ {member.mention} eliminado."
+        )
 
     else:
 
-        msg = "⚠️ Ese usuario no estaba en la lista."
-
-
-    await interaction.response.send_message(msg)
-
-
-
-# ==========================
-# /listusers
-# ==========================
-
-
-@bot.tree.command(
-    name="listusers",
-    description="Ver usuarios autorizados"
-)
-async def listusers(interaction: discord.Interaction):
-
-
-    if not has_permission(interaction.user.id):
-
-        await interaction.response.send_message(
-            "❌ No tienes permisos.",
-            ephemeral=True
+        await ctx.send(
+            "⚠️ Ese usuario no estaba autorizado."
         )
 
+
+
+@bot.command()
+async def listusers(ctx):
+
+    if not has_permission(ctx.author.id):
+
+        await ctx.send(
+            "❌ No tienes permisos."
+        )
         return
 
 
@@ -332,23 +243,26 @@ async def listusers(interaction: discord.Interaction):
 
     if not users:
 
-        text = "No hay usuarios autorizados."
-
-    else:
-
-        text = "\n".join(
-            f"<@{u}>"
-            for u in users
+        await ctx.send(
+            "No hay usuarios autorizados."
         )
+        return
 
 
-    await interaction.response.send_message(
-        f"👥 Usuarios autorizados:\n{text}"
+    lista = "\n".join(
+        f"<@{user}>"
+        for user in users
     )
+
+
+    await ctx.send(
+        f"👥 Usuarios autorizados:\n{lista}"
+    )
+
+
 
 # ==========================
 # RUN
 # ==========================
-
 
 bot.run(DISCORD_TOKEN)

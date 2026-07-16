@@ -1,26 +1,18 @@
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 
-from config import DISCORD_TOKEN
-from minecraft import get_status
-from aternos import start_server, stop_server
-from permissions import (
-    has_permission,
-    add_user,
-    remove_user,
-    get_users
+from config import (
+    DISCORD_TOKEN,
+    STATUS_CHANNEL,
+    MINECRAFT_IP,
+    MINECRAFT_PORT
 )
 
-import asyncio
+from minecraft import get_status
 
-
-# ==========================
-# CONFIG BOT
-# ==========================
 
 intents = discord.Intents.default()
 intents.message_content = True
-intents.members = True
 
 
 bot = commands.Bot(
@@ -29,19 +21,85 @@ bot = commands.Bot(
 )
 
 
-# ==========================
-# EVENTO INICIO
-# ==========================
+ultimo_estado = None
+
 
 @bot.event
 async def on_ready():
 
     print(f"✅ Bot conectado como {bot.user}")
 
+    actualizar_estado.start()
+
 
 
 # ==========================
-# COMANDO !mc
+# CANAL AUTOMATICO
+# ==========================
+
+@tasks.loop(minutes=5)
+async def actualizar_estado():
+
+    global ultimo_estado
+
+
+    canal = bot.get_channel(
+        STATUS_CHANNEL
+    )
+
+
+    if canal is None:
+        return
+
+
+    status = get_status()
+
+
+    if status["online"]:
+
+        nombre = (
+            f"🟢 Krypt "
+            f"{status['players']}"
+        )
+
+        estado = True
+
+
+    else:
+
+        nombre = "🔴 Krypt OFFLINE"
+
+        estado = False
+
+
+
+    await canal.edit(
+        name=nombre
+    )
+
+
+    if ultimo_estado != estado:
+
+        if estado:
+
+            await canal.send(
+                "🟢 El servidor de Minecraft está ONLINE"
+            )
+
+        else:
+
+            await canal.send(
+                "🔴 El servidor de Minecraft está OFFLINE"
+            )
+
+
+    ultimo_estado = estado
+
+
+
+
+# ==========================
+# !mc
 # ==========================
 
 @bot.command()
@@ -50,11 +108,151 @@ async def mc(ctx):
     status = get_status()
 
 
+    if not status["online"]:
+
+        await ctx.send(
+            "🔴 El servidor está offline"
+        )
+
+        return
+
+
+
+    embed = discord.Embed(
+        title="🟢 Minecraft ONLINE",
+        color=0x00ff00
+    )
+
+
+    embed.add_field(
+        name="👥 Jugadores",
+        value=status["players"]
+    )
+
+
+    embed.add_field(
+        name="📦 Versión",
+        value=status["version"]
+    )
+
+
+    embed.add_field(
+        name="🏓 Ping",
+        value=f"{status['ping']}ms"
+    )
+
+
+    await ctx.send(
+        embed=embed
+    )
+
+
+
+# ==========================
+# !ip
+# ==========================
+
+@bot.command()
+async def ip(ctx):
+
+    await ctx.send(
+        f"🌐 IP del servidor:\n"
+        f"`{MINECRAFT_IP}:{MINECRAFT_PORT}`"
+    )
+
+
+
+# ==========================
+# !players
+# ==========================
+
+@bot.command()
+async def players(ctx):
+
+    status = get_status()
+
+
+    if not status["online"]:
+
+        await ctx.send(
+            "🔴 Servidor offline"
+        )
+
+        return
+
+
+    if not status["player_list"]:
+
+        await ctx.send(
+            "👥 No hay jugadores conectados"
+        )
+
+        return
+
+
+    lista = "\n".join(
+        status["player_list"]
+    )
+
+
+    await ctx.send(
+        f"👥 Jugadores online:\n```{lista}```"
+    )
+
+
+
+# ==========================
+# !ping
+# ==========================
+
+@bot.command()
+async def ping(ctx):
+
+    status = get_status()
+
+
     if status["online"]:
 
-        embed = discord.Embed(
-            title="🟢 Servidor ONLINE",
-            color=0x00ff00
+        await ctx.send(
+            f"🏓 Ping: `{status['ping']}ms`"
+        )
+
+    else:
+
+        await ctx.send(
+            "🔴 Servidor offline"
+        )
+
+
+
+# ==========================
+# !info
+# ==========================
+
+@bot.command()
+async def info(ctx):
+
+    status = get_status()
+
+
+    embed = discord.Embed(
+        title="📌 Krypt Server",
+        color=0x3498db
+    )
+
+
+    embed.add_field(
+        name="🌐 IP",
+        value=f"{MINECRAFT_IP}:{MINECRAFT_PORT}",
+        inline=False
+    )
+
+
+    if status["online"]:
+
+        embed.add_field(
+            name="🟢 Estado",
+            value="Online"
         )
 
         embed.add_field(
@@ -67,202 +265,70 @@ async def mc(ctx):
             value=status["version"]
         )
 
+    else:
+
+        embed.add_field(
+            name="🔴 Estado",
+            value="Offline"
+        )
+
+
+    await ctx.send(
+        embed=embed
+    )
+
+
+
+# ==========================
+# !status
+# ==========================
+
+@bot.command()
+async def status(ctx):
+
+    data = get_status()
+
+
+    if data["online"]:
+
+        await ctx.send(
+            f"🟢 Online | "
+            f"{data['players']}"
+        )
 
     else:
 
-        embed = discord.Embed(
-            title="🔴 Servidor OFFLINE",
-            color=0xff0000
+        await ctx.send(
+            "🔴 Offline"
         )
+
+
+
+# ==========================
+# AYUDA
+# ==========================
+
+@bot.command()
+async def help(ctx):
+
+    embed = discord.Embed(
+        title="🤖 Comandos Krypt Bot",
+        color=0x7289da
+    )
+
+
+    embed.description = """
+`!mc` - Estado completo
+`!ip` - IP del servidor
+`!players` - Jugadores online
+`!ping` - Ping
+`!info` - Información
+`!status` - Estado rápido
+"""
 
 
     await ctx.send(embed=embed)
 
 
-
-# ==========================
-# COMANDO !start
-# ==========================
-
-@bot.command()
-async def start(ctx):
-
-    if not has_permission(ctx.author.id):
-
-        await ctx.send(
-            "❌ No tienes permisos para iniciar el servidor."
-        )
-        return
-
-
-    msg = await ctx.send(
-        "▶️ Iniciando servidor..."
-    )
-
-
-    result = await start_server()
-
-
-    await msg.edit(
-        content=result
-    )
-
-
-
-# ==========================
-# COMANDO !stop
-# ==========================
-
-@bot.command()
-async def stop(ctx):
-
-    if not has_permission(ctx.author.id):
-
-        await ctx.send(
-            "❌ No tienes permisos para apagar el servidor."
-        )
-        return
-
-
-    msg = await ctx.send(
-        "⏹️ Apagando servidor..."
-    )
-
-
-    result = await stop_server()
-
-
-    await msg.edit(
-        content=result
-    )
-
-
-
-# ==========================
-# COMANDO !restart
-# ==========================
-
-@bot.command()
-async def restart(ctx):
-
-    if not has_permission(ctx.author.id):
-
-        await ctx.send(
-            "❌ No tienes permisos."
-        )
-        return
-
-
-    await ctx.send(
-        "🔄 Reiniciando servidor..."
-    )
-
-
-    stop = await stop_server()
-
-    await ctx.send(stop)
-
-
-    await asyncio.sleep(10)
-
-
-    start = await start_server()
-
-    await ctx.send(start)
-
-
-
-# ==========================
-# ADMINISTRACIÓN USUARIOS
-# ==========================
-
-
-@bot.command()
-async def adduser(ctx, member: discord.Member):
-
-    if not has_permission(ctx.author.id):
-
-        await ctx.send(
-            "❌ No tienes permisos."
-        )
-        return
-
-
-    if add_user(member.id):
-
-        await ctx.send(
-            f"✅ {member.mention} ahora puede controlar el servidor."
-        )
-
-    else:
-
-        await ctx.send(
-            "⚠️ Ese usuario ya tiene permisos."
-        )
-
-
-
-@bot.command()
-async def removeuser(ctx, member: discord.Member):
-
-    if not has_permission(ctx.author.id):
-
-        await ctx.send(
-            "❌ No tienes permisos."
-        )
-        return
-
-
-    if remove_user(member.id):
-
-        await ctx.send(
-            f"✅ {member.mention} eliminado."
-        )
-
-    else:
-
-        await ctx.send(
-            "⚠️ Ese usuario no estaba autorizado."
-        )
-
-
-
-@bot.command()
-async def listusers(ctx):
-
-    if not has_permission(ctx.author.id):
-
-        await ctx.send(
-            "❌ No tienes permisos."
-        )
-        return
-
-
-    users = get_users()
-
-
-    if not users:
-
-        await ctx.send(
-            "No hay usuarios autorizados."
-        )
-        return
-
-
-    lista = "\n".join(
-        f"<@{user}>"
-        for user in users
-    )
-
-
-    await ctx.send(
-        f"👥 Usuarios autorizados:\n{lista}"
-    )
-
-
-
-# ==========================
-# RUN
-# ==========================
 
 bot.run(DISCORD_TOKEN)

@@ -1,50 +1,39 @@
 from mcstatus import JavaServer
-from mcrcon import MCRcon
-from config import MINECRAFT_IP, MINECRAFT_PORT, RCON_PASSWORD
-
-
-server = JavaServer.lookup(
-    f"{MINECRAFT_IP}:{MINECRAFT_PORT}"
-)
+from config import MINECRAFT_IP, MINECRAFT_PORT
 
 
 def get_status():
 
     try:
 
+        server = JavaServer.lookup(
+            f"{MINECRAFT_IP}:{MINECRAFT_PORT}"
+        )
+
         status = server.status()
+
+
+        players = []
+
+        if status.players.sample:
+
+            players = [
+                p.name
+                for p in status.players.sample
+            ]
+
 
         return {
             "online": True,
             "players": f"{status.players.online}/{status.players.max}",
+            "player_list": players,
             "version": status.version.name,
             "ping": round(status.latency)
         }
 
 
-    except:
+    except Exception:
 
         return {
             "online": False
         }
-
-
-
-def send_command(command):
-
-    try:
-
-        with MCRcon(
-            MINECRAFT_IP,
-            RCON_PASSWORD,
-            port=25575
-        ) as rcon:
-
-            response = rcon.command(command)
-
-            return response
-
-
-    except Exception as e:
-
-        return str(e)

@@ -11,8 +11,13 @@ from config import (
 from minecraft import get_status
 
 
+# ==========================
+# CONFIGURACION BOT
+# ==========================
+
 intents = discord.Intents.default()
 intents.message_content = True
+intents.members = True
 
 
 bot = commands.Bot(
@@ -24,17 +29,22 @@ bot = commands.Bot(
 ultimo_estado = None
 
 
+# ==========================
+# BOT ENCENDIDO
+# ==========================
+
 @bot.event
 async def on_ready():
 
     print(f"✅ Bot conectado como {bot.user}")
 
-    actualizar_estado.start()
+    if not actualizar_estado.is_running():
+        actualizar_estado.start()
 
 
 
 # ==========================
-# CANAL AUTOMATICO
+# CAMBIO DE CANAL AUTOMATICO
 # ==========================
 
 @tasks.loop(minutes=5)
@@ -73,9 +83,21 @@ async def actualizar_estado():
 
 
 
-    await canal.edit(
-        name=nombre
-    )
+    try:
+
+        if canal.name != nombre:
+
+            await canal.edit(
+                name=nombre
+            )
+
+
+    except Exception as e:
+
+        print(
+            f"Error cambiando canal: {e}"
+        )
+
 
 
     if ultimo_estado != estado:
@@ -94,7 +116,6 @@ async def actualizar_estado():
 
 
     ultimo_estado = estado
-
 
 
 
@@ -129,12 +150,10 @@ async def mc(ctx):
         value=status["players"]
     )
 
-
     embed.add_field(
         name="📦 Versión",
         value=status["version"]
     )
-
 
     embed.add_field(
         name="🏓 Ping",
@@ -156,7 +175,7 @@ async def mc(ctx):
 async def ip(ctx):
 
     await ctx.send(
-        f"🌐 IP del servidor:\n"
+        "🌐 IP del servidor:\n"
         f"`{MINECRAFT_IP}:{MINECRAFT_PORT}`"
     )
 
@@ -181,6 +200,7 @@ async def players(ctx):
         return
 
 
+
     if not status["player_list"]:
 
         await ctx.send(
@@ -190,13 +210,14 @@ async def players(ctx):
         return
 
 
-    lista = "\n".join(
+
+    jugadores = "\n".join(
         status["player_list"]
     )
 
 
     await ctx.send(
-        f"👥 Jugadores online:\n```{lista}```"
+        f"👥 Jugadores online:\n```{jugadores}```"
     )
 
 
@@ -243,7 +264,7 @@ async def info(ctx):
 
     embed.add_field(
         name="🌐 IP",
-        value=f"{MINECRAFT_IP}:{MINECRAFT_PORT}",
+        value=f"`{MINECRAFT_IP}:{MINECRAFT_PORT}`",
         inline=False
     )
 
@@ -264,6 +285,12 @@ async def info(ctx):
             name="📦 Versión",
             value=status["version"]
         )
+
+        embed.add_field(
+            name="🏓 Ping",
+            value=f"{status['ping']}ms"
+        )
+
 
     else:
 
@@ -305,30 +332,64 @@ async def status(ctx):
 
 
 # ==========================
-# AYUDA
+# !commands
 # ==========================
 
-@bot.command()
-async def help(ctx):
+@bot.command(name="commands")
+async def commands_list(ctx):
 
     embed = discord.Embed(
-        title="🤖 Comandos Krypt Bot",
+        title="🤖 Krypt Bot",
+        description="Comandos disponibles:",
         color=0x7289da
     )
 
 
-    embed.description = """
-`!mc` - Estado completo
-`!ip` - IP del servidor
-`!players` - Jugadores online
-`!ping` - Ping
-`!info` - Información
-`!status` - Estado rápido
-"""
+    embed.add_field(
+        name="🌐 Servidor",
+        value="""
+`!mc`
+Estado completo
+
+`!status`
+Estado rápido
+
+`!ip`
+IP del servidor
+
+`!info`
+Información
+
+`!ping`
+Ping
+""",
+        inline=False
+    )
 
 
-    await ctx.send(embed=embed)
+    embed.add_field(
+        name="👥 Jugadores",
+        value="""
+`!players`
+Jugadores conectados
+""",
+        inline=False
+    )
 
 
+    embed.set_footer(
+        text="Krypt Server"
+    )
+
+
+    await ctx.send(
+        embed=embed
+    )
+
+
+
+# ==========================
+# INICIAR BOT
+# ==========================
 
 bot.run(DISCORD_TOKEN)
